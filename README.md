@@ -216,7 +216,7 @@ fixed along the way; see comments in the source.
 
 The RQS implementation reflects most of the feature of the ziggurat
 implementation but it is additionally generic over the number of bits *N* of the
-table, unlike the ziggurat which is hardcoded with *N*=7.
+table index, unlike the ziggurat which is hardcoded with *N*=7.
 In order to compare apples to apples, all tests are performed with *N*=7 for the
 RQS algorithm as well.
 
@@ -253,7 +253,8 @@ symmetric and/or tailed distributions, with and without tail rejection sampling.
 
 In the meantime you may have a look at the
 [sample implementation](benchmark/rqs_normal.hpp) used in the benchmark above.
-Some doc and examples will be coming soon too, stay tuned...
+Some doc and examples will be coming soon too, stay tuned... And hopefully a
+Rust implementation someday.
 
 
 ## References
