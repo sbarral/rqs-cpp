@@ -104,7 +104,7 @@ public:
             // potentially applied to the smallest signed integer, with
             // undefined consequences).
             // With both gcc and clang this appears to be even slightly faster
-            // than the original ziggurath code.
+            // than the original ziggurat code.
             constexpr UIntType m_mask = (UIntType(1) << (W - 7)) - 1;
             constexpr IntType complement =
                 static_cast<IntType>((UIntType(1) << (W - 8)) - 1);
