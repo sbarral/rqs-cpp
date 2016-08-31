@@ -116,7 +116,7 @@ If *y* is greater than *H*, then the tail is sampled.
 
 Note that for the sake of efficiency, in the actual implementation *y* is an
 integer and the various rejection thresholds are appropriately scaled so as
-to only use integer arithmetic until *x* is needs to be computed.
+to only use integer arithmetic until *x* needs to be computed.
 
 
 ## Quality
