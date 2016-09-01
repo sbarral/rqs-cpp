@@ -155,7 +155,7 @@ be found in the symmetry of the scatter plots.
 
 But can we quantify this, especially at higher precision *W*? To some extent,
 yes. A test that can point to poor distribution of the variates at small scales
-without requiring too much computing power is the Kuth collision test
+without requiring too much computing power is the Knuth collision test
 [[3]](#references) where *n* balls are randomly throw into 2*ᵈ* urns.
 Even with *n*<2*ᵈ*, the number of collisions (i.e. balls that get into an
 already filled urn) can be sufficient to form the basis for a statistical
