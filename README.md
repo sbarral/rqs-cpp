@@ -14,7 +14,8 @@ The RQS algorithm has a number of advantages over other methods, including:
 [[1]](#references) and thus typically many times faster than
 [inversion sampling](https://en.wikipedia.org/wiki/Inverse_transform_sampling),
 
-* **quality**: the entropy of the generated distribution is noticeably higher
+* **quality**: the entropy of the generated distribution is
+[noticeably higher](#quality)
 than that of the ziggurat and quite close to that of inversion sampling,
 
 * **convenience**: there is no need to know the cumulative distribution function
@@ -171,13 +172,12 @@ The Knuth collision test is then performed for several values of *d*, keeping
 The RNG is a mt19937 with *W*=32 bits and all floating point computations
 are performed in double precision.
 The ziggurat and RQS algorithm both use 128-entry tables.
-The inversion sampling test used for comparison is actually "simulated" by
-simply transforming the RNG integer directly to a uniform number in \[0, 1)
-— this is indeed equivalent if infinite floating point precision can be assumed,
-which is not too far a stretch given that *W*=32 while IEEE doubles have 53-bit
-precision.
+The inversion sampling test used for comparison is actually an ideal case: it
+is simulated by simply transforming the RNG integer directly to a uniform number
+in \[0, 1), which is akin to perform inversion sampling and then transforming
+back the variate with the normal CDF using infinite floating point precision.
 
-So here are the results, with each test repeated 10 time for each value of *d*.
+So here are the results, with each test repeated 10 times for each value of *d*.
 See the [source](benchmark/collision.cpp) for details (note that
 the Boost special functions library is required).
 
@@ -194,13 +194,14 @@ So what does this plot say?
 Expectedly all algorithms fail at *d*=33 since with *W*=32 bits of information
 it is obviously impossible to evenly distribute balls into 2*³³* urns.
 Simulated inversion sampling succeeds at *d*=32, but this was also expected
-since this test is de-facto a measure of the quality of mt19937.
+since this ideal inversion sampling test is de-facto a measure of the quality
+of mt19937 (which is known to be good).
 
 The quality of the RQS algorithm is very satisfactory with a loss of only 2
-effective bits compared to inversion sampling. The ziggurat algorithm is
-clearly worse with 5 effective bits lost compared to inversion sampling, thus
-confirming the hint given by the visual comparison of distributions with
-*W*=16.
+effective bits compared to ideal inversion sampling. The ziggurat algorithm is
+clearly worse with a 5-bit effective loss compared to ideal inversion sampling,
+thus confirming the hint given by our former visual comparison of distributions
+generated with *W*=16.
 
 
 ## Speed
