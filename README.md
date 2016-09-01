@@ -54,8 +54,7 @@ apparently overlooked, however, is that just like the ziggurat algorithm it
 can be very efficiently implemented using only one random number per sample.
 
 For simplicity, let us consider a non-symmetric distribution with compact
-support and let us ignore some further optimizations made in the actual
-implementation.
+support.
 The algorithm starts by computing majorizing and minorizing functions for the
 PDF using vertical rectangles. This is quite similar to the procedure used to
 compute upper and lower
@@ -65,8 +64,9 @@ the rectangles of the majorizing functions have equal areas. This information
 is tabulated as part of pre-processing, typically in a 128 or 256-elements
 table.
 
-Sampling is based on a an optimized rejection algorithm that uses the
-above-described majorizing function. Random variates are generated as follows:
+Sampling is based on an optimized rejection algorithm that uses the
+above-described majorizing function. Ignoring for now some optimizations of the
+actual implementation, random variates are generated as follows:
 
 1. a *W*-bit random integer is generated,
 
@@ -81,26 +81,25 @@ and *H* where *H* is the height of the upper rectangle,
 
 5. \[*rectangle sampling: here is the trick*\]: we are left with *y*, a nice
 number uniformly distributed between in \[0, *h*) with almost the same entropy
-as the untested *y* (we have only lost *log2(H/h)* bits) so why throw it to
+as the untested *y* —after all we have only lost *log2(H/h)* bits— so why throw it to
 the garbage? Instead, we re-map *y* from \[0, *h*) to the interval
 \[*xᵢ* and *xᵢ₊₁*) and return the number *x* thus produced.
 
 6. \[*wedge sampling: this happens rarely*\] generate another random number
 *x* within the interval \[*xᵢ* and *xᵢ₊₁* ) of the current rectangle and check
-whether *y* is within the PDF envelope; if yes, return the *x*, otherwise jump
+whether *y* is within the PDF envelope; if yes, return *x*, otherwise jump
 back to 1.
 
 A legitimate question would be whether we have not lost the *N* bits of
-precision in generating the quantile index. This is a rightful concern which
-in fact has already been raised for the ziggurat algorithm [[3]](#references).
-
-In our case, however, it is useful to note that the generation of *x* needs
-less precision because once the quantile has been determined, we have de-facto
-already narrowed down the interval to \[*xᵢ* and *xᵢ₊₁*), and since there are
-2*ᴺ* quantiles, we need this much less precision. In fact, the method can be
-shown to be nothing less than a fast inversion sampling method for the
-majorizing function with rejection sampling of the wedges, so the precision
-loss is in theory relatively moderate and mostly imputable to wedge rejection.
+precision in generating the quantile index.
+It is useful to note, however, that the generation of *x* actually requires
+less precision precisely because once the quantile has been determined, we
+have in effect already narrowed down the interval to \[*xᵢ* and *xᵢ₊₁*), and
+since there are 2*ᴺ* such intervals, we need this much less precision.
+In fact, the method can be shown to be nothing else than a fast inversion
+sampling method for the majorizing function with the addition of rejection
+sampling of the wedges, so the precision loss is in theory relatively moderate
+and mostly imputable to wedge rejection.
 
 For tailed distributions, the algorithm admits an externally supplied (fallback)
 tail distribution, just like the ziggurat algorithm, but does not constrain
@@ -119,7 +118,7 @@ If *y* is greater than *H*, then the tail is sampled.
 
 Note that for the sake of efficiency, in the actual implementation *y* is an
 integer and the various rejection thresholds are appropriately scaled so as
-to only use integer arithmetic until *x* needs to be computed.
+to only use integer arithmetic until *x* is to be computed.
 
 
 ## Quality
@@ -130,8 +129,8 @@ Also, since this is a rejection method, goodness of fit is assumed without
 demonstration.
 
 The main question becomes therefore: how much of the quality of the original
-random number does it actually retain? Or alternatively, how "uniformly" (in
-a loose meaning) would the numbers be distributed if we used an ideal RNG?
+RNG does it actually retain? Or alternatively, how "uniformly" (in a loose
+meaning) would the numbers be distributed if we used an ideal RNG?
 From this perspective, inversion sampling can be considered the reference
 method: baring rounding issues and provided that the floating point mantissa
 has more digits that the random number, one can always map a number generated
