@@ -276,7 +276,7 @@ Rust implementation someday.
 \[3\] D. E. Knuth, "The art of computer programming",
 *Vol. 2*, 3rd ed., Addison-Wesley (1997).
 
-\[4\] J. A. Doornik
+\[4\] J. A. Doornik,
 ["An improved ziggurat method to generate normal random samples"]
 (http://www.doornik.com/research/ziggurat.pdf),
 Technical note, University of Oxford (2005).
