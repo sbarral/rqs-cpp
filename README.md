@@ -60,8 +60,8 @@ The algorithm starts by computing majorizing and minorizing functions for the
 PDF using vertical rectangles. This is quite similar to the procedure used to
 compute upper and lower
 [Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum),
-but instead of splitting the *x* interval evenly, it is divides such that
-the rectangles of the majorizing functions have equal areas. This information
+but instead of splitting the *x* interval evenly, it is divided so that
+all rectangles of the majorizing functions have equal areas. This information
 is tabulated as part of pre-processing, typically in a 128 or 256-elements
 table.
 
@@ -82,8 +82,9 @@ and *H* where *H* is the height of the upper rectangle,
 
 5. \[*rectangle sampling: here is the trick*\]: we are left with *y*, a nice
 number uniformly distributed between in \[0, *h*) with almost the same entropy
-as the untested *y* —after all we have only lost *log2(H/h)* bits— so why throw it to
-the garbage? Instead, we re-map *y* from \[0, *h*) to the interval
+as the untested *y* —after all we have only lost *log2(H/h)* bits— so why throw
+it to the garbage?
+Instead, we transform linearly *y* from \[0, *h*) to the interval
 \[*xᵢ* and *xᵢ₊₁*) and return the number *x* thus produced.
 
 6. \[*wedge sampling: this happens rarely*\] generate another random number
@@ -174,7 +175,7 @@ are performed in double precision.
 The ziggurat and RQS algorithm both use 128-entry tables.
 The inversion sampling test used for comparison is actually an ideal case: it
 is simulated by simply transforming the RNG integer directly to a uniform number
-in \[0, 1), which is akin to perform inversion sampling and then transforming
+in \[0, 1), which is akin to performing inversion sampling and then transforming
 back the variate with the normal CDF using infinite floating point precision.
 
 So here are the results, with each test repeated 10 times for each value of *d*.
