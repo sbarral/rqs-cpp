@@ -56,15 +56,17 @@ can be very efficiently implemented using only one random number per sample.
 For simplicity, let us consider a non-symmetric distribution with compact
 support and let us ignore some further optimizations made in the actual
 implementation.
-The algorithm starts by computing upper and lower quadrature of the CDF as
-in upper and lower [Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum),
-but instead of splitting the *x* interval evenly it divides it in such a way
-that the upper rectangles have equal areas. This information is tabulated as
-part of pre-processing, typically in a 128 or 256-elements table.
+The algorithm starts by computing majorizing and minorizing functions for the
+PDF using vertical rectangles. This is quite similar to the procedure used to
+compute upper and lower
+[Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum),
+but instead of splitting the *x* interval evenly, it is divides such that
+the rectangles of the majorizing functions have equal areas. This information
+is tabulated as part of pre-processing, typically in a 128 or 256-elements
+table.
 
-Sampling is based on a rejection algorithm where the majorizing function
-is constituted by the upper quadrature. The steps to produce a random number
-are the following:
+Sampling is based on a an optimized rejection algorithm that uses the
+above-described majorizing function. Random variates are generated as follows:
 
 1. a *W*-bit random integer is generated,
 
@@ -96,9 +98,9 @@ In our case, however, it is useful to note that the generation of *x* needs
 less precision because once the quantile has been determined, we have de-facto
 already narrowed down the interval to \[*xᵢ* and *xᵢ₊₁*), and since there are
 2*ᴺ* quantiles, we need this much less precision. In fact, the method can be
-shown to be nothing less than a fast inversion sampling method for the upper
-quadrature with rejection sampling of the wedges, so the precision loss is
-in theory relatively moderate and mostly due to wedge rejection.
+shown to be nothing less than a fast inversion sampling method for the
+majorizing function with rejection sampling of the wedges, so the precision
+loss is in theory relatively moderate and mostly imputable to wedge rejection.
 
 For tailed distributions, the algorithm admits an externally supplied (fallback)
 tail distribution, just like the ziggurat algorithm, but does not constrain
@@ -111,7 +113,8 @@ library.
 
 To include a tail, step 4 above is modified to generate a real number *y*
 between 0 and *H/\[1-P(tail)\]* where *P(tail)* is the tail sampling probability
-(i.e. the area of the tail divided by the total area of the upper quadrature).
+(i.e. the area of the tail divided by the total area of the majorizing function,
+tail included).
 If *y* is greater than *H*, then the tail is sampled.
 
 Note that for the sake of efficiency, in the actual implementation *y* is an
@@ -156,7 +159,7 @@ be found in the symmetry of the scatter plots.
 But can we quantify this, especially at higher precision *W*? To some extent,
 yes. A test that can point to poor distribution of the variates at small scales
 without requiring too much computing power is the Knuth collision test
-[[3]](#references) where *n* balls are randomly throw into 2*ᵈ* urns.
+[[3]](#references) where *n* balls are randomly thrown into 2*ᵈ* urns.
 Even with *n*<2*ᵈ*, the number of collisions (i.e. balls that get into an
 already filled urn) can be sufficient to form the basis for a statistical
 test that assesses uniformity defects.
