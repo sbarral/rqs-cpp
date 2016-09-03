@@ -4,20 +4,24 @@
 #include <cstdint>
 #include <limits>
 
+
+
+/// Top-level RQS namespace.
+///
 namespace rqs { // Rectangular quantiles sampling namespace
 
 namespace detail {
 
 // Compile-time computation of the bit width.
 template<typename UIntType>
-constexpr int bit_width(UIntType value, int shift = 0) {
+constexpr std::size_t bit_width(UIntType value, std::size_t shift = 0) {
     return value==UIntType(0) ? shift : bit_width(value >> 1, shift + 1);
 }
 
 
 // Number of significant digits of a random number generator with range 2^N.
 template<typename RngType>
-constexpr int rng_digits()
+constexpr std::size_t rng_digits()
 {
     return bit_width(RngType::max() - RngType::min());
 }
@@ -40,7 +44,7 @@ constexpr bool is_power_of_2_less_1(UIntType value) {
 // As a small, pragmatic exception to this rule, random number generators which
 // never produce 0 and/or 2^N-1 are tolerated.
 template<typename RngType>
-constexpr int check_rng_range()
+constexpr std::size_t check_rng_range()
 {
     using RngResultType = decltype(RngType::min());
     static_assert( RngType::min()==0 || RngType::min()==1,
@@ -53,15 +57,15 @@ constexpr int check_rng_range()
 
 
 // Generate P random bits.
-template<typename UIntType, int P>
+template<typename UIntType, std::size_t P>
 struct random_bits
 {
     template<typename RngType>
     static UIntType generate(RngType& rng)
     {
-        constexpr int N = rng_digits<RngType>();
-        constexpr int R = P>N ? P-N : 0;
-        constexpr int S = N>P ? N-P : 0;
+        constexpr std::size_t N = rng_digits<RngType>();
+        constexpr std::size_t R = P>N ? P-N : 0;
+        constexpr std::size_t S = N>P ? N-P : 0;
         return random_bits<UIntType, R>::generate_next(rng,
             (static_cast<UIntType>(rng() >> S)));
     }
@@ -69,10 +73,10 @@ struct random_bits
     template<typename RngType>
     static UIntType generate_next(RngType& rng, UIntType u)
     {
-        constexpr int N = rng_digits<RngType>();
-        constexpr int R = P>N ? P-N : 0;
-        constexpr int S = N>P ? N-P : 0;
-        constexpr int T = N<P ? N : P;
+        constexpr std::size_t N = rng_digits<RngType>();
+        constexpr std::size_t R = P>N ? P-N : 0;
+        constexpr std::size_t S = N>P ? N-P : 0;
+        constexpr std::size_t T = N<P ? N : P;
         return random_bits<UIntType, R>::generate_next(rng,
             (u << T) | (static_cast<UIntType>(rng()) >> S));
     }
@@ -91,7 +95,7 @@ struct random_bits<UIntType, 0>
 
 struct BITFIELD_TOO_WIDE_ERROR;
 
-template<int N>
+template<std::size_t N>
 struct bitfield_category
 {
     using int_fast_t = BITFIELD_TOO_WIDE_ERROR;
@@ -148,8 +152,9 @@ struct bitfield_category<5>
 } // end namespace detail
 
 
-// Integer types ables to hold at least W bits.
-template<int W>
+/// Traits specifying convenient integer types able to hold W bits.
+///
+template<std::size_t W>
 struct integer_traits
 {
 private:
@@ -175,10 +180,11 @@ public:
 };
 
 
-// Generate a random integer equidistributed in [0, 2^W-1].
-//
-// As many random numbers are generated as necessary to obtain P bits.
-template<typename UIntType, int W, typename RngType>
+/// Generate a random integer equidistributed in [0, 2^W-1].
+///
+/// As many random numbers are generated as necessary to fill W random bits.
+///
+template<typename UIntType, std::size_t W, typename RngType>
 inline
 UIntType generate_random_integer(RngType& rng)
 {
@@ -187,28 +193,29 @@ UIntType generate_random_integer(RngType& rng)
 }
 
 
-// Generate a floating point value in [0,1) with a precision of W bits.
-//
-// This is similar to std::generate_canonical except that:
-//  * it is faster,
-//  * it is hopefully less buggy, meaning it should never return 1.0
-//    and should have a better bin distribution quality,
-//  * it is less flexible: the RNG ideally needs to generate values between 0
-//    and a power of 2 less 1, though a minimum value of 1 and/or a maximum
-//    value equal to a power of 2 less 2 are tolerated,
-//  * it is less powerfull: the platform must have an unsigned type able to
-//    store W bits or the number of significant bits of the floating point type,
-//    whichever is less.
-template<typename RealType, int W, typename RngType>
+/// Generate a floating point value in [0,1) with a precision of W bits.
+///
+/// This a drop-in relacement for std::generate_canonical with the following
+/// caveats:
+///  * it is faster,
+///  * it is hopefully less buggy, meaning it should never return 1.0
+///    and should have a better bin distribution quality,
+///  * it is less flexible: the RNG ideally needs to generate values between 0
+///    and a power of 2 less 1, though a minimum value of 1 and/or a maximum
+///    value equal to a power of 2 less 2 are tolerated,
+///  * it is less generic: the platform must have an unsigned type able to
+///    store W bits or the number of significant bits of the floating point
+///    type, whichever is less.
+template<typename RealType, std::size_t W, typename RngType>
 inline
 RealType generate_random_real(RngType& rng)
 {
-    constexpr int N = std::numeric_limits<RealType>::digits;
-    constexpr int M = N<W ? N : W;
+    constexpr std::size_t N = std::numeric_limits<RealType>::digits;
+    constexpr std::size_t M = N<W ? N : W;
     using UIntType = typename integer_traits<M>::uint_fast_t;
-    constexpr RealType scale = RealType(1)/(RealType(UIntType(1) << M/2)
-                                           *RealType(UIntType(1) << (M - M/2)));
-    return generate_random_integer<UIntType, M>(rng)*scale;
+    constexpr RealType s = RealType(1)/(RealType(UIntType(1) << M/2)
+                                       *RealType(UIntType(1) << (M - M/2)));
+    return s*static_cast<RealType>(generate_random_integer<UIntType, M>(rng));
 }
 
 

@@ -41,8 +41,8 @@ private:
     struct Datum
     {
         RealType x;
-        UIntType scaled_yratio;
-        RealType scaled_yinf;
+        UIntType scaled_fratio;
+        RealType scaled_finf;
         RealType scaled_dx;
     };
 
@@ -91,15 +91,13 @@ public:
         // Compute the quantiles.
         const RealType rel_tol = std::numeric_limits<RealType>::epsilon()*1e4;
 
-        std::vector<RealType> x_guess =
-            rqs::trapezoidal_rule_approximate_partition(Pdf<RealType>(),
-                RealType(0), xtail, n);
-        std::array<RealType, 0> x_extrema = {}; // no inner extrema
-        rqs::quadrature<RealType> q =
-            rqs::newton_quantile_quadrature(Pdf<RealType>(), DPdf<RealType>(),
-                                            x_guess.begin(), x_guess.end(),
-                                            x_extrema.begin(), x_extrema.end(),
-                                            rel_tol);
+        auto x_guess = rqs::trapezoidal_rule_equipartition(
+            Pdf<RealType>(), RealType(0), xtail, n);
+
+        auto p = rqs::newton_monotonic_function_partition(
+            Pdf<RealType>(), DPdf<RealType>(),
+            x_guess.begin(), x_guess.end(),
+            rel_tol);
         
         // Compute the tail switch, i.e. an integer threshold such that when
         // drawing a random integer r, the probability:
@@ -107,7 +105,7 @@ public:
         // expresses the probability to sample the tail.
         RealType upper_quadrature_area = 0.0;
         for (std::size_t i=0; i!=n; ++i) {
-            upper_quadrature_area += (q.x[i+1] - q.x[i])*q.ysup[i];
+            upper_quadrature_area += (p.x[i+1] - p.x[i])*p.fsup[i];
         }
         tail_switch_ = static_cast<UIntType>(
             std::round(RealType(UIntType(1) << (W - N - 1)) *
@@ -115,11 +113,11 @@ public:
         
         // Compute the tables.
         for (std::size_t i=0; i!=n; ++i) {
-            data_[i].x = q.x[i];
-            data_[i].scaled_yratio = static_cast<UIntType>(
-                (q.yinf[i]/q.ysup[i])*tail_switch_);
-            data_[i].scaled_yinf = q.ysup[i]/tail_switch_;
-            data_[i].scaled_dx = (q.x[i+1] - q.x[i])/data_[i].scaled_yratio;
+            data_[i].x = p.x[i];
+            data_[i].scaled_fratio = static_cast<UIntType>(
+                (p.finf[i]/p.fsup[i])*tail_switch_);
+            data_[i].scaled_finf = p.fsup[i]/tail_switch_;
+            data_[i].scaled_dx = (p.x[i+1] - p.x[i])/data_[i].scaled_fratio;
         }
     }
     
@@ -145,9 +143,9 @@ public:
             
             const Datum& d = data_[i];
             // Note that the following test will also fail if 'u' is greater
-            // than the tail switch value since all yratio values are lower
+            // than the tail switch value since all fratio values are lower
             // than the switch value.
-            if (u<=d.scaled_yratio)
+            if (u<=d.scaled_fratio)
                 return s*d.x + s*d.scaled_dx*u;
             
             // Should the tail be sampled?
@@ -156,8 +154,8 @@ public:
 
             // Otherwise it is a wedge, test y<f(x) for rejection sampling.
             RealType v = rqs::generate_random_real<RealType, W>(g); // v in [0,1)
-            RealType x = d.x + v*(d.scaled_dx*d.scaled_yratio);
-            if ((u*d.scaled_yinf) < exp(RealType(-0.5)*x*x))
+            RealType x = d.x + v*(d.scaled_dx*d.scaled_fratio);
+            if ((u*d.scaled_finf) < exp(RealType(-0.5)*x*x))
                 return s*x;
         }
     }

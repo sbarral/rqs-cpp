@@ -5,35 +5,42 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <iterator>
 #include <utility>
 #include <vector>
 
+#include "generate_random.hpp"
 
+
+/// Top-level RQS namespace.
+///
 namespace rqs { // Rectangular quantiles sampling namespace
 
 namespace detail {
 
 // Beware: for efficiency the diagonal and RHS terms are modified in place.
-template<typename T>
+template<typename RealType>
 void solve_tridiagonal_system(
-    const std::vector<T>& a,
-    std::vector<T>& b,
-    const std::vector<T>& c,
-    std::vector<T>& rhs,
-    std::vector<T>& sol )
+    const std::vector<RealType>& a,
+    std::vector<RealType>& b,
+    const std::vector<RealType>& c,
+    std::vector<RealType>& rhs,
+    std::vector<RealType>& sol )
 {
-    std::size_t m = a.size();
+    using size_type = typename std::vector<RealType>::size_type;
+
+    auto m = a.size();
     
-    // eliminate the sub-diagonal
-    for (std::size_t i=1; i!=m; ++i) {
-        T pivot = a[i]/b[i-1];
+    // Eliminate the sub-diagonal.
+    for (size_type i=1; i!=m; ++i) {
+        RealType pivot = a[i]/b[i-1];
         b[i] -= pivot*c[i-1];
         rhs[i] -= pivot*rhs[i-1];
     }
     
-    // solve the remaining upper bidiagonal system
+    // Solve the remaining upper bidiagonal system.
     sol[m-1] = rhs[m-1]/b[m-1];
-    for (std::size_t i=m-2; ; --i) {
+    for (size_type i=m-2; ; --i) {
         sol[i] = (rhs[i] - c[i]*sol[i+1])/b[i];
         if (i==0) break;
     }
@@ -42,118 +49,60 @@ void solve_tridiagonal_system(
 } // namespace detail
 
 
-
-/// Multiple roots finder based on the bisection method.
+/// Computes a partition dividing approximatelt evenly the area under a function
+//  using the trapezoidal rule.
 ///
-/// The intervals (x0, x1) within which each root should be searched must be
-/// provided as std::pair or std::tuple within an STL-compliant sequence.
-/// The values of f(x0) and f(x1) at the bounds of each interval should have
-/// opposite signs, failing which the returned vector will not contain any root
-/// for such interval (the size of the returned vector is the number of roots
-/// actually found).
-/// Each returned root x is within +/-tol of the actual solution where tol is
-/// the specified tolerance.
+/// The trapezoidal rule is applied to function `f` over a regular grid with
+/// `nb_points` grid points (including outer and inner nodes) so as to divide
+/// interval (`x0`, `x1`) into the specified number of partitions such that the
+/// areas under the function over each sub-interval are equal.
+/// The returned vector is the set of abscissae.
 ///
-template<typename T, class Func, class InputIt>
-std::vector<T> bisect_roots(
+template<typename RealType, class Func>
+std::vector<RealType> trapezoidal_rule_equipartition(
     Func f,
-    InputIt interval_first,
-    InputIt interval_last,
-    T tol)
+    RealType x0,
+    RealType x1,
+    unsigned int nb_partitions,
+    unsigned int nb_points)
 {
-    std::vector<T> roots;
-    for (InputIt interval=interval_first; interval!=interval_last; ++interval) {
-        T x0 = std::get<0>(*interval);
-        T x1 = std::get<1>(*interval);
-        T xm = 0.5*(x0+x1);
-        auto y0 = f(x0);
-        auto y1 = f(x1);
-        if (y0*y1<0.0) {
-            while (std::abs(xm-x0)>tol) {
-                auto ym = f(xm);
-                if (y0*ym<0.0) {
-                    x1 = xm;
-                    y1 = ym;
-                }
-                else {
-                    x0 = xm;
-                    y0 = ym;
-                }
-                xm = 0.5*(x0+x1);
-            }
-            roots.push_back(xm);
-        }
-    }
-    return roots;
-}
-
-
-/// Single root finder based on the bisection method.
-///
-/// See the documentation for the multiple finder root version. The returned
-/// vector contains the solution if found or is empty otherwise.
-///
-template<typename T, class Func>
-std::vector<T> bisect_roots(
-    Func f,
-    std::pair<T, T> interval,
-    T tol )
-{
-    std::vector<std::pair<T, T>> intervals{interval};
-    return bisect_roots<T>(f, intervals.begin(), intervals.end(), tol);
-}
-
-
-/// Compute an approximate qualtile partition using the trapezoidal rule.
-///
-/// The trapezoidal rule is applied to the given function over a regular grid
-/// with 'nb_points' grid points (including outer and inner nodes) to divide
-/// interval (x0, x1) into 'nb_partitions' partitions of approximately equal
-/// areas.
-/// The returned vector is the set of x coordinates.
-template<typename T, class Func>
-std::vector<T> trapezoidal_rule_approximate_partition(
-    Func f,
-    T x0,
-    T x1,
-    std::size_t nb_partitions,
-    std::size_t nb_points )
-{
-    // convenient aliases
-    auto& n = nb_points;
-    auto& m = nb_partitions;
+    using size_type = typename std::vector<RealType>::size_type;
     
-    // compute the curve
-    T dx = (x1-x0)/(n-1);
-    std::vector<T> x(n);
-    std::vector<T> y(n);
-    for (std::size_t i=0; i!=(n-1); ++i) {
+    // Convenient const aliases.
+    const auto& n = nb_points;
+    const auto& m = nb_partitions;
+    
+    // Compute the curve.
+    RealType dx = (x1-x0)/(n-1);
+    std::vector<RealType> x(n);
+    std::vector<RealType> y(n);
+    for (size_type i=0; i!=(n-1); ++i) {
         x[i] = x0 + i*dx;
         y[i] = f(x[i]);
     }
     x[n-1] = x1;
     y[n-1] = f(x1);
     
-    // total area (scaled by 1/dx)
-    T s = 0.5*(y[0] + y[n-1]);
-    for (std::size_t i=1; i!=(n-2); ++i) {
+    // Total area (scaled by 1/dx).
+    RealType s = RealType(0.5)*(y[0] + y[n-1]);
+    for (size_type i=1; i!=(n-2); ++i) {
         s += y[i];
     }
     
-    // choose abscissas that split the curve area into equal partitions
-    std::vector<T> xp(m+1);
+    // Choose abscissae that evenly split the area under the curve.
+    std::vector<RealType> xp(m+1);
     xp[0] = x0;
     xp[m] = x1;   
     {
-        T al = 0.0;
-        T ar = 0.5*(y[0] + y[1]);
-        std::size_t i=0;
-        for (std::size_t j=1; j!=m; ++j) {
-            T a = s*(static_cast<T>(j)/static_cast<T>(m));
+        RealType al = 0.0;
+        RealType ar = RealType(0.5)*(y[0] + y[1]);
+        size_type i=0;
+        for (size_type j=1; j!=m; ++j) {
+            RealType a = s*(static_cast<RealType>(j)/static_cast<RealType>(m));
             while (a>ar) {
                 ++i;
                 al = ar;
-                ar += 0.5*(y[i] + y[i+1]);
+                ar += RealType(0.5)*(y[i] + y[i+1]);
             }
             xp[j] = x[i] + (x[i+1]-x[i])*((a-al)/(ar-al));
         }
@@ -163,164 +112,179 @@ std::vector<T> trapezoidal_rule_approximate_partition(
 }
 
 
-/// Compute an approximate qualtile partition using the trapezoidal rule.
+/// Computes a partition dividing approximatelt evenly the area under a function
+//  using the trapezoidal rule.
 ///
 /// This overload sets the number of grid points to the requested number of
 /// partitions.
 ///
-template<typename T, class Func>
-std::vector<T> trapezoidal_rule_approximate_partition(
+template<typename RealType, class Func>
+std::vector<RealType> trapezoidal_rule_equipartition(
     Func f,
-    T x0,
-    T x1,
-    std::size_t nb_partitions )
+    RealType x0,
+    RealType x1,
+    unsigned int nb_partitions)
 {
-    return trapezoidal_rule_approximate_partition<T, Func>(
+    return trapezoidal_rule_equipartition<RealType, Func>(
         f, x0, x1, nb_partitions, nb_partitions );
 }
 
 
-
-
-/// Upper and lower rectangular quadrature of a function (see Riemann sums).
+/// A partition and the local function extrema over each sub-interval.
 ///
-/// A rectangular quadrature similar to that used to compute Riemann sums.
-/// The 'yinf' and 'ysup' member variables represent respectively lower
-/// and upper quadratures, i.e. rectangles which height is the infimum and
-/// supremum of a function over the support of the rectangle.
+/// Partition of an interval into sub-intervals [`x[i]`, `x[i+1]`].
+/// The infimum and supremum of the function over each sub-interval `i` are
+/// stored as `finf[i]` and `fsup[i]`, respectively.
 ///
-template<typename T>
-struct quadrature
+template<typename RealType>
+struct partition_data
 {
-    std::vector<T> x;
-    std::vector<T> yinf;
-    std::vector<T> ysup;
+    std::vector<RealType> x;
+    std::vector<RealType> finf;
+    std::vector<RealType> fsup;
 };
 
 
-/// Compute a quadrature with even upper rectangles areas using Newton's method.
+/// Computes a RQS partition using Newton's method.
 ///
-/// A multivariate Newton method is used to determine the abscissas 'x' such
-/// that the areas of all upper quadrature rectangles are equal. For faster
-/// convergence it requires a reasonable initial estimate of 'x'.
-/// The function derivative and an ordered sequence of the inner function extrema
-/// (boundary points excluded) must as well be provided.
+/// A Newton's method (multivariate) is used to determine a partition of the
+/// interval defined by the first and last point of the vector of abcissae
+/// passed in argument in such a way that the rectangles making up an upper
+/// Riemann sum of function `f` have equal areas.
+///
+/// The returned `partition_data` object includes as well the infimum and
+/// supremum of the function over each sub-interval. 
+///
+/// For faster convergence it is recommended to provide a reasonable initial
+/// estimate of the partition abcissae passed in arguments.
+///
+/// The derivative `df` of `f` and an ordered sequence of the inner function
+/// extrema (boundary points excluded) must as well be provided.
+///
 /// The tolerance is the maximum relative dispersion of upper rectangle areas,
 /// computed as the difference between the largest and smallest area divided by
-/// the average area.
+/// the average.
+///
+/// Under-relaxation and over-relaxation may be optionaly mandated by setting
+/// `relax` at less or more than 1, respectively.
+///
 /// The maximum number of iterations for the Newtow method may be optionally
 /// specified.
 ///
-template<typename T, class Func, class DFunc, class InputIt1, class InputIt2>
-quadrature<T> newton_quantile_quadrature(
+template<class Func, class DFunc, class InputIt1, class InputIt2>
+auto newton_partition(
     Func f,
     DFunc df,
     InputIt1 x_initial_first,
     InputIt1 x_initial_last,
     InputIt2 x_extremum_first,
     InputIt2 x_extremum_last,
-    T tol,
-    T relax = 1.0,
-    std::size_t max_iter = 128 )
+    typename std::iterator_traits<InputIt1>::value_type tol,
+    typename std::iterator_traits<InputIt1>::value_type relax = 1,
+    unsigned int max_iter = 128)
+-> partition_data<typename std::iterator_traits<InputIt1>::value_type>
 {
-    // quadrature object and convenient aliases
-    quadrature<T> q;
-    auto& x    = q.x;
-    auto& yinf = q.yinf;
-    auto& ysup = q.ysup;
+    using RealType = typename std::iterator_traits<InputIt1>::value_type;
+    using size_type = typename std::vector<RealType>::size_type;
+
+    // Partition object and convenient aliases.
+    partition_data<RealType> p;
+    auto& x    = p.x;
+    auto& finf = p.finf;
+    auto& fsup = p.fsup;
     
-    // initialization of the quadrature and extrema vectors
+    // Initialization of the quadrature and extrema vectors.
     x.assign(x_initial_first, x_initial_last);
-    auto n = x.size() - 1;
-    yinf.resize(n);
-    ysup.resize(n);
+    const auto n = x.size() - 1;
+    finf.resize(n);
+    fsup.resize(n);
     
-    std::vector<std::pair<T,T>> extrema;
+    std::vector<std::pair<RealType, RealType>> extrema;
     while (x_extremum_first!=x_extremum_last) {
         if ((*x_extremum_first-x.front())*(*x_extremum_first-x.back())<=0.0) {
             extrema.push_back(
-                std::pair<T,T>(*x_extremum_first, f(*x_extremum_first)) );
+                std::pair<RealType, RealType>(*x_extremum_first, f(*x_extremum_first)) );
         }
         ++x_extremum_first;
     }
     
     // define the main vectors and pre-compute edge values
-    std::vector<T> y(n+1);
-    std::vector<T> dx(n-1);
-    std::vector<T> dy_dx(n+1);
-    std::vector<T> dysup_dxl(n), dysup_dxr(n);
-    std::vector<T> minus_s(n-1);
-    std::vector<T> ds_dxc(n-1), ds_dxl(n-1), ds_dxr(n-1);
+    std::vector<RealType> y(n+1);
+    std::vector<RealType> dx(n-1);
+    std::vector<RealType> dy_dx(n+1);
+    std::vector<RealType> dfsup_dxl(n), dfsup_dxr(n);
+    std::vector<RealType> minus_s(n-1);
+    std::vector<RealType> ds_dxc(n-1), ds_dxl(n-1), ds_dxr(n-1);
     
     y.front() = f(x.front());
     y.back()  = f(x.back());
     dy_dx.front() = 0.0;
     dy_dx.back()  = 0.0;
     
-    std::size_t iter = 0;
+    unsigned int iter = 0;
     while(true)
     {
-        // compute the values at inner points
-        for (std::size_t i=1; i!=n; ++i) {
+        // Compute the values at inner points.
+        for (size_type i=1; i!=n; ++i) {
             y[i] = f(x[i]);
             dy_dx[i] = df(x[i]);
         }
         
-        // determine the supremum ysup of y in the range (x[i], x[i+1]),
-        // the partial derivatives of ysup with respect to x[i] and x[i+1],
-        // the minimum and maximum partition areas and the total area
+        // Determine the supremum fsup of y in the range (x[i], x[i+1]),
+        // the partial derivatives of fsup with respect to x[i] and x[i+1],
+        // the minimum and maximum partition areas and the total area.
         auto extremum = extrema.begin();
-        T max_area = 0.0;
-        T min_area = std::numeric_limits<T>::max();
-        T sum_area = 0.0;
-        for (std::size_t i=0; i!=n; ++i) {
+        RealType max_area = 0.0;
+        RealType min_area = std::numeric_limits<RealType>::max();
+        RealType sum_area = 0.0;
+        for (size_type i=0; i!=n; ++i) {
             if (y[i]>y[i+1]) {
-                ysup[i] = y[i];
-                dysup_dxl[i] = dy_dx[i];
-                dysup_dxr[i] = 0.0;
+                fsup[i] = y[i];
+                dfsup_dxl[i] = dy_dx[i];
+                dfsup_dxr[i] = 0.0;
             }
             else {
-                ysup[i] = y[i+1];
-                dysup_dxl[i] = 0.0;
-                dysup_dxr[i] = dy_dx[i+1];
+                fsup[i] = y[i+1];
+                dfsup_dxl[i] = 0.0;
+                dfsup_dxr[i] = dy_dx[i+1];
             }
             
-            // check if there are extrema within the (x[i], x[i+1]) range
+            // Check if there are extrema within the (x[i], x[i+1]) range.
             while ( extremum!=extrema.end() &&
                     (extremum->first-x[i])*(extremum->first-x[i+1])<=0.0 )
             {
-                if (extremum->second > ysup[i]) {
-                    ysup[i] = extremum->second;
-                    dysup_dxl[i] = 0.0;
-                    dysup_dxr[i] = 0.0;
+                if (extremum->second > fsup[i]) {
+                    fsup[i] = extremum->second;
+                    dfsup_dxl[i] = 0.0;
+                    dfsup_dxr[i] = 0.0;
                 }
                 ++extremum;
             }
             
-            T area = ysup[i]*std::abs(x[i+1]-x[i]);
+            RealType area = fsup[i]*std::abs(x[i+1]-x[i]);
             max_area = std::max(area, max_area);
             min_area = std::min(area, min_area);
             sum_area += area;
         }
         
-        // check convergence
+        // Check convergence.
         if ((max_area-min_area)<tol*(sum_area/n)) {
-            // determine the infimum yinf of y in the range (x[i], x[i+1])
+            // Determine the infimum finf of y in the range (x[i], x[i+1]).
             extremum = extrema.begin();
-            for (std::size_t i=0; i!=n; ++i) {
+            for (size_type i=0; i!=n; ++i) {
                 if (y[i]>y[i+1]) {
-                    yinf[i] = y[i+1];
+                    finf[i] = y[i+1];
                 }
                 else {
-                    yinf[i] = y[i];
+                    finf[i] = y[i];
                 }
                 
-                // check if there are extrema within the (x[i], x[i+1]) range
-                while ( extremum!=extrema.end() &&
+                // Check if there are extrema within the (x[i], x[i+1]) range.
+                while (extremum!=extrema.end() &&
                     (extremum->first-x[i])*(extremum->first-x[i+1])<=0.0 )
                 {
-                    if (extremum->second < yinf[i]) {
-                        yinf[i] = extremum->second;
+                    if (extremum->second < finf[i]) {
+                        finf[i] = extremum->second;
                     }
                     ++extremum;
                 }                
@@ -329,26 +293,26 @@ quadrature<T> newton_quantile_quadrature(
         }
         
         if (++iter>max_iter) {
-            q.x.clear();
-            q.yinf.clear();
-            q.ysup.clear();
+            p.x.clear();
+            p.finf.clear();
+            p.fsup.clear();
             
             break;
         }
         
-        // area difference between neigboring rectangles and partial
-        // derivatives of s with respect to x[i], x[i+1] and x[i+2]
-        for (std::size_t i=0; i!=(n-1); ++i) { 
-            minus_s[i] = ysup[i]*(x[i+1]-x[i]) - ysup[i+1]*(x[i+2]-x[i+1]);
+        // Area difference between neigboring rectangles and partial
+        // derivatives of s with respect to x[i], x[i+1] and x[i+2].
+        for (size_type i=0; i!=(n-1); ++i) {
+            minus_s[i] = fsup[i]*(x[i+1]-x[i]) - fsup[i+1]*(x[i+2]-x[i+1]);
             
-            ds_dxl[i] = ysup[i] - (x[i+1]-x[i])*dysup_dxl[i];
-            ds_dxc[i] = (x[i+2]-x[i+1])*dysup_dxl[i+1]
-                      - (x[i+1]-x[i])*dysup_dxr[i]
-                      - (ysup[i] + ysup[i+1]);
-            ds_dxr[i] = ysup[i+1] + (x[i+2]-x[i+1])*dysup_dxr[i+1];
+            ds_dxl[i] = fsup[i] - (x[i+1]-x[i])*dfsup_dxl[i];
+            ds_dxc[i] = (x[i+2]-x[i+1])*dfsup_dxl[i+1]
+                      - (x[i+1]-x[i])*dfsup_dxr[i]
+                      - (fsup[i] + fsup[i+1]);
+            ds_dxr[i] = fsup[i+1] + (x[i+2]-x[i+1])*dfsup_dxr[i+1];
         }
         
-        // solve the tri-diagonal system S + (dS/dX)*dX = 0 with:
+        // Solve the tri-diagonal system S + (dS/dX)*dX = 0 with:
         //         | ds0/dx1 ds0/dx2    0     ...                    0     |
         //         | ds1/dx1 ds1/dx2 ds1/dx3    0     ...            0     |
         // dS/dX = |    0    ds2/dx2 ds2/dx3 ds2/dx4    0     ...    0     |
@@ -360,16 +324,15 @@ quadrature<T> newton_quantile_quadrature(
         //      | dx1     |         | minus_s0     |
         // dX = | ...     |    -S = | ...    |
         //      | dx(n-1) |         | minus_s(n-2) |
-        
-        detail::solve_tridiagonal_system<T>(
+        detail::solve_tridiagonal_system<RealType>(
             ds_dxl, ds_dxc, ds_dxr, minus_s, dx );
         
-        // for the sake of convergence stability, updated positions are
-        // constrained within the bounds set by former neighbors positions
+        // For the sake of stability, updated positions are constrained within
+        // the bounds set by former neighbors positions.
         {
-            T x0 = x[0];
-            for (std::size_t i=1; i!=n; ++i) {
-                std::pair<T,T> x_range = std::minmax(x0, x[i+1]);
+            RealType x0 = x[0];
+            for (size_type i=1; i!=n; ++i) {
+                std::pair<RealType, RealType> x_range = std::minmax(x0, x[i+1]);
                 x0 = x[i];
                 x[i] = std::max(x[i] + relax*dx[i-1], x_range.first);
                 x[i] = std::min(x[i], x_range.second);
@@ -377,91 +340,139 @@ quadrature<T> newton_quantile_quadrature(
         }
     }
     
-    // voila
-    return q;
+    // Voila.
+    return p;
 }
 
 
-/// Tail of a Weibull distribution generated by inversion sampling.
+/// Computes a RQS partition using Newton's method.
 ///
-/// Generates the tail of a Weibull distribution such that:
+/// This overload can be used if the function is monotonic over the specified
+/// interval.
 ///
-///  f(x;a,b,c) = s*((x-c)/b)*exp[-((x-c)/b)^a] for x/b > x0/b
-///  f(x;a,b,c) = 0 otherwise
+template<class Func, class DFunc, class InputIt1>
+auto newton_monotonic_function_partition(
+    Func f,
+    DFunc df,
+    InputIt1 x_initial_first,
+    InputIt1 x_initial_last,
+    typename std::iterator_traits<InputIt1>::value_type tol,
+    typename std::iterator_traits<InputIt1>::value_type relax = 1,
+    unsigned int max_iter = 128)
+-> partition_data<typename std::iterator_traits<InputIt1>::value_type>
+{
+    
+    typename std::iterator_traits<InputIt1>::value_type* dummy_ptr = 0;
+    return newton_partition(f, df, x_initial_first, x_initial_last,
+        dummy_ptr, dummy_ptr, tol, relax, max_iter);
+}
+
+
+/// Tail of a 3-parameter Weibull distribution generated by inversion sampling.
 ///
-/// where 'a' is strictly positive. The scale parameter 'b' may be positive for
-/// a tail extending to +inf and negative for a tail extending to -inf.
-/// The (positive) normalization constant 's' need not be specified.
+/// Generates the tail of a shifted Weibull distribution such that:
 ///
-template<typename T>
+///  `f(x;a,b,c) = s*((x-c)/b)*exp[-((x-c)/b)^a]` if `x/b > x0/b`
+///
+/// and otherwise:
+///
+///  `f(x;a,b,c) = 0`
+///
+/// where `a` is strictly positive. The scale parameter `b` may be positive for
+/// a tail extending to `+inf` and negative for a tail extending to `-inf`.
+/// Parameter `c` is the so-called location parameter.
+/// The (positive) normalization constant `s` need not be specified.
+///
+/// Template parameter `W` sets the requested precision (in bits) for the
+/// generation of floating point random number.
+///
+template<typename RealType, std::size_t W>
 class weibull_tail_distribution
 {
 public:
-    using result_type = T;
-    using param_type = weibull_tail_distribution<T>;
+    using result_type = RealType;
+    using param_type = weibull_tail_distribution<RealType, W>;
     
     
-    weibull_tail_distribution(T a=1.0, T b=1.0, T c=0.0, T x0=0.0) :
-        inv_a_(1.0/a), b_(b), c_(c), x0_(x0), alpha_(std::pow((x0-c)/b, a))
+    weibull_tail_distribution(RealType a=1.0, RealType b=1.0, RealType c=0.0,
+                              RealType x0=0.0)
+    :   inv_a_(RealType(1.0)/a), b_(b), c_(c), x0_(x0), 
+        alpha_(std::pow((x0-c)/b, a))
     {}
     
     
+    /// Returns a random variate using the random number generator passed as
+    /// argument.
+    ///
+    /// This method is thread-safe as long as non-const methods are not used.
     template<class RngType>
-    result_type operator()(RngType& g)
+    result_type operator()(RngType& g) const
     {
-        constexpr auto digits = std::numeric_limits<T>::digits;
-        
-        T r = std::generate_canonical<T,digits>(g);
-        return c_ + b_*std::pow(alpha_ - std::log(1.0-r), inv_a_);
+        RealType r = generate_random_real<RealType, W>(g);
+        return c_ + b_*std::pow(alpha_ - std::log(RealType(1.0)-r), inv_a_);
     }
     
     
+    /// Resets the distribution.
+    ///
+    /// This method is a no-op; it is defined for the sake of compatibility with
+    /// distributions of the standard library.
     void reset()
     {}
     
     
+    /// Returns an object containing the distribution parameters.
+    ///
     param_type param() const
     {
         return *this;
     }
     
     
+    /// Initializes the distribution with new distribution parameters.
+    ///
     void param(const param_type& params)
     {
         *this = params;
     }
     
-    
+    /// Returns the smallest value potentially returned by `operator()`.
     result_type min() const
     {
-        T minus_inf = std::numeric_limits<T>::is_iec559 ?
-                      -std::numeric_limits<T>::infinity()
-                    : std::numeric_limits<T>::min();
-        return b_<0 ? minus_inf : x0_;
+        constexpr RealType minus_inf =
+            std::numeric_limits<RealType>::is_iec559 ?
+                 -std::numeric_limits<RealType>::infinity()
+                : std::numeric_limits<RealType>::min();
+        return b_<RealType(0.0) ? minus_inf : x0_;
     }
     
     
+    /// Returns the greatest value potentially returned by `operator()`.
     result_type max() const
     {
-        T plus_inf = std::numeric_limits<T>::is_iec559 ?
-                     std::numeric_limits<T>::infinity()
-                   : std::numeric_limits<T>::min();
-        return b_>0 ? plus_inf : x0_;
+        constexpr RealType plus_inf =
+            std::numeric_limits<RealType>::is_iec559 ?
+                  std::numeric_limits<RealType>::infinity()
+                : std::numeric_limits<RealType>::min();
+        return b_>RealType(0.0) ? plus_inf : x0_;
     }
     
     
+    /// Returns distribution parameter a.
     result_type a() const
     {
-        return 1.0/inv_a_;
+        return RealType(1.0)/inv_a_;
     }
     
     
+    /// Returns distribution parameter b.
     result_type b() const
     {
         return b_;
     }
     
     
+    /// Returns distribution parameter c.
     result_type c() const
     {
         return c_;
@@ -469,66 +480,75 @@ public:
     
     
 private:
-    T inv_a_;
-    T b_;
-    T c_;
-    T x0_;
-    T alpha_;
+    RealType inv_a_;
+    RealType b_;
+    RealType c_;
+    RealType x0_;
+    RealType alpha_;
 };
 
 
 
 
-// weibull_pdf<T>
-// Weibull probability density function with optional weighting.
-//
-// The Weibull pdf is defined as:
-//
-//  f(x;a,b,c) = w*a/|b|*((x-c)/b)*exp[-((x-c)/b)^a] for x/b > x0/b
-//  f(x;a,b,c) = 0 otherwise
-//
-// where 'a' is strictly positive, 'b' may be negative and 'w' is an optional
-// weighting factor.
-
-template<typename T>
+/// 3-parameter Weibull probability density function with optional weighting.
+///
+/// The Weibull PDF is defined as:
+///
+///  f(x;a,b,c) = w*a/|b|*((x-c)/b)*exp[-((x-c)/b)^a] for x/b > c/b
+///  f(x;a,b,c) = 0 otherwise
+///
+/// where 'a' is strictly positive, 'b' may be negative and 'w' is an optional
+/// weighting factor.
+///
+template<typename RealType>
 class weibull_pdf
 {
 public:
-    using result_type = T;
+    using result_type = RealType;
     
     
-    weibull_pdf(T a=1.0, T b=1.0, T c=0.0, T w=1.0) :
-        a_(a), inv_b_(1.0/b), c_(c), s_(w*std::abs(a/b))
+    weibull_pdf(RealType a=1.0, RealType b=1.0, RealType c=0.0, RealType w=1.0)
+    :   a_(a), inv_b_(RealType(1.0)/b), c_(c), s_(w*std::abs(a/b))
     {}
     
     
-    result_type operator()(T x) const
+    /// Returns the value of the PDF at `x`.
+    ///
+    result_type operator()(RealType x) const
     {
-        T y = (x - c_)*inv_b_;
-        if (y<0) return T(0);
-        T z = std::pow(y, a_-1.0);
+        RealType y = (x - c_)*inv_b_;
+        if (y<RealType(0.0)) return RealType(0.0);
+        RealType z = std::pow(y, a_-RealType(1.0));
         
         return s_*z*std::exp(-y*z);
     }
     
+    /// Returns the total area under the function.
+    ///
+    /// This value is 1 if the weighting factor of the PDF is 1
+    ///
     result_type total_weight() const
     {
         return s_/std::abs(a_*inv_b_);
     }
     
-    result_type tail_weight(T x0) const
+    /// Returns the area under the function from `x0` to infinity.
+    ///
+    /// This value is 1 if the weighting factor of the PDF is 1 and `x0==c`.
+    ///
+    result_type tail_weight(RealType x0) const
     {
-        T z0 = std::pow((x0 - c_)*inv_b_, a_);
+        RealType z0 = std::pow((x0 - c_)*inv_b_, a_);
         
         return s_*std::exp(-z0)/(a_*inv_b_);
     }
     
     
 private:
-    T a_;
-    T inv_b_;
-    T c_;
-    T s_;
+    RealType a_;
+    RealType inv_b_;
+    RealType c_;
+    RealType s_;
 };
 
 
