@@ -46,24 +46,24 @@ distributions and is quite inconvenient as a ready-to-use algorithm due to its
 complex set-up and its constraints on the tail area (the tail is included in the
 bottom layer which is required to have the same total area as other layers).
 
-The underlying idea of RQS is simple: instead of sampling horizontal 
-rectangular quantiles like in the ziggurat algorithm, vertical rectangles are
-used instead.
-This idea is nothing exotic in itself and I was therefore not surprised to
-find that it had already been investigated [[2]](#references). What was
-apparently overlooked, however, is that just like the ziggurat algorithm it
-can be very efficiently implemented using only one random number per sample.
+The underlying idea of RQS is simple: a majorizing function based on vertical
+rectangles is used, as in an upper
+[Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum). Instead of splitting
+the *x* interval evenly, however, the partition is specifically chosen so that
+all such rectangles have equal areas.
+
+This basic idea is admitedly nothing exotic in itself and, as it turns out, has
+already been investigated earlier [[2]](#references). What was apparently
+overlooked, however, is that with a little bit of ingenuity it can be very
+efficiently implemented using only one random number per sample, giving it
+the speed of the ziggurat without many of its shortcommings.
 
 For simplicity, let us consider a non-symmetric distribution with compact
 support.
-The algorithm starts by computing majorizing and minorizing functions for the
-PDF using vertical rectangles. This is quite similar to the procedure used to
-compute upper and lower
-[Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum),
-but instead of splitting the *x* interval evenly, it is divided so that
-all rectangles of the majorizing functions have equal areas. This information
-is tabulated as part of pre-processing, typically in a 128 or 256-elements
-table.
+The algorithm starts by computing the majorizing function as outline above,
+and then a minorizing function made of rectangles defined over the same
+partition. This information is tabulated as part of pre-processing, typically
+in a 128 or 256-elements table.
 
 Sampling is based on an optimized rejection algorithm that uses the
 above-described majorizing function. Ignoring for now some optimizations of the
@@ -233,20 +233,24 @@ Please feel free to contribute your timings using the
 [nonius](https://nonius.io) microbenchmarking library which in turn needs a
 couple of the Boost libraries.
 
-|                                   | gcc 4.9.2 (-O2)  | clang 3.5.0 (-O2) |
-| --------------------------------- | ---------------- | ----------------- |
-| Ziggurat, W=32                    |  68.7 µs         |  108.0 µs         |
-| RQS, W=32                         |  74.8 µs   (+9%) |  119.7 µs  (+11%) |
-| Ziggurat, W=64                    |  79.5 µs         |  102.9 µs         |
-| RQS, W=64                         |  81.0 µs   (+2%) |  113.4 µs  (+10%) |
-| libstdc++ (polar transform), W=64 | 417.9 µs (+426%) |  939.0 µs (+812%) |
+|                                   | gcc 4.9.2 (-O2)  | clang 3.5.0 (-O2)  |
+| --------------------------------- | ---------------- | ------------------ |
+| Ziggurat, W=32                    |  68.9 µs         |   97.3 µs          |
+| RQS, W=32                         |  74.6 µs   (+8%) |  118.8 µs  (+22%)  |
+| Ziggurat, W=64                    |  80.1 µs         |   98.1 µs          |
+| RQS, W=64                         |  81.5 µs   (+2%) |  113.1 µs  (+15%)  |
+| libstdc++ (polar transform), W=64 | 437.7 µs (+446%) | 1436.7 µs (+1365%) |
 
 
 Despite a few oddities like clang taking longer to compute with a 32-bit RNG
-than with a 64 bit RNG, the picture is very consistent: the difference between
-the ziggurat and the RQS is barely noticeable with only a 2% to 11% penalty for
-the RQS, compared to an abysmal +426% and +812% for the native libstdc++
-implementation of the normal distribution which uses the polar transform.
+than with a 64 bit RNG and being in general worse at optimising the RQS, the
+picture is very consistent: the difference between the ziggurat and the RQS is
+barely noticeable with only a 2% to 22% penalty for the RQS, compared to an
+abysmal +446% and +1365% for the native libstdc++ implementation of the normal
+distribution which uses the polar transform. Tests with -O3 give nearly
+identical figures for gcc but actually slightly worse figures on clang
+for both the ziggurat and the RQS, with approximately the same relative
+overhead for RQS (+21% and +14%).
 
 
 ## Todo
